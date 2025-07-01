@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Dán ảnh và chuyển sang chữ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        #pasteArea {
+            width: 100%;
+            max-width: 500px;
+            height: 200px;
+            border: 2px dashed #aaa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            color: #777;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        #preview {
+            max-width: 100%;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 500px;
+            height: 150px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Dán ảnh vào khung bên dưới (Ctrl + V)</h2>
+
+    <div id="pasteArea">Nhấn Ctrl + V để dán ảnh vào đây</div>
+    <img id="preview" alt="Ảnh đã dán sẽ hiện ở đây" />
+
+    <button id="sendBtn">Gửi ảnh</button>
+
+    <h3>Kết quả OCR:</h3>
+    <textarea id="textOutput" readonly></textarea>
+
+    <script>
+        let pastedImageBlob = null;
+
+        const pasteArea = document.getElementById('pasteArea');
+        const preview = document.getElementById('preview');
+        const sendBtn = document.getElementById('sendBtn');
+        const textOutput = document.getElementById('textOutput');
+
+        pasteArea.addEventListener('paste', function (event) {
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file' && item.type.startsWith('image')) {
+                    const blob = item.getAsFile();
+                    pastedImageBlob = blob;
+
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            }
+        });
+
+        sendBtn.addEventListener('click', function () {
+            console.log('Đang xử lý ảnh...');
+            if (!pastedImageBlob) {
+                alert('Vui lòng dán ảnh trước.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', pastedImageBlob, 'pasted-image.png');
+
+            fetch('http://localhost:5000/upload', {
+                method: 'POST',
+                body: formData
+            })
+                .then(async res => {
+
+                    const contentType = res.headers.get('content-type');
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        throw new Error('Lỗi server: ' + errText);
+                    }
+
+                    if (contentType && contentType.includes('application/json')) {
+                        return res.json();
+                    } else {
+                        const text = await res.text();
+                        throw new Error('Không nhận được JSON: ' + text);
+                    }
+                })
+                .then(data => {
+                    console.log('Server trả về:', data);
+                    textOutput.value = data.text || 'Không đọc được nội dung từ ảnh.';
+                })
+                .catch(err => {
+                    console.error('Lỗi:', err);
+                    textOutput.value = 'Lỗi khi gửi ảnh hoặc xử lý: ' + err.message;
+                });
+        });
+    </script>
+
+</body>
+
+</html>
